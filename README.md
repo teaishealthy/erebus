@@ -1,4 +1,8 @@
 # erebus
+![code style black](https://img.shields.io/badge/code%20style-black-black?style=for-the-badge)
+![coverage](https://img.shields.io/coveralls/github/teaishealthy/erebus?style=for-the-badge)
+
+
 
 A free and open source Hyperion deobfuscator.
 
