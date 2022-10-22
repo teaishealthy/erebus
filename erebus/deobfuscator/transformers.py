@@ -1,7 +1,8 @@
 # type: ignore
 import ast
-from typing import Any
 import string
+from ast import unparse
+from typing import Any, Dict
 
 CONSTANTS = (
     ast.Name,
@@ -30,18 +31,19 @@ __all__ = (
     "UselessLambda",
 )
 
-constants: dict[str, Any] = {}
+constants: Dict[str, Any] = {}
 
 
 class StringSubscriptSimple(ast.NodeTransformer):
     """Transforms Hyperion specific string slicing into a string literal"""
+
     def visit_Subscript(self, node: ast.Subscript):
         if isinstance(node.value, ast.Str):
             if isinstance(node.slice, ast.Slice):
-                code = ast.unparse(node.slice.step)
+                code = unparse(node.slice.step)
                 if not any(s in code for s in string.ascii_letters):
 
-                    s = node.value.s[:: eval(ast.unparse(node.slice.step))]
+                    s = node.value.s[:: eval(unparse(node.slice.step))]
                     return ast.Str(s=s)
         return super().generic_visit(node)
 
@@ -84,6 +86,7 @@ class InlineConstants(ast.NodeTransformer):
 
 class DunderImportRemover(ast.NodeTransformer):
     """Just transform all __import__ calls to the name of the module being imported"""
+
     def visit_Call(self, node: ast.Call) -> Any:
         if isinstance(node.func, ast.Name) and node.func.id == "__import__":
             return ast.Name(id=node.args[0].s, ctx=ast.Load())
@@ -92,6 +95,7 @@ class DunderImportRemover(ast.NodeTransformer):
 
 class GetattrConstructRemover(ast.NodeTransformer):
     """Hyperion has an interesting way of accessing module attributes."""
+
     def visit_Call(self, node: ast.Call) -> Any:
 
         if isinstance(node.func, ast.Name) and node.func.id == "getattr":
@@ -102,6 +106,7 @@ class GetattrConstructRemover(ast.NodeTransformer):
 
 class BuiltinsAccessRemover(ast.NodeTransformer):
     """Instead of accessing builtins, just use the name directly"""
+
     def visit_Attribute(self, node: ast.Attribute) -> Any:
         if isinstance(node.value, ast.Name) and node.value.id == "builtins":
             return ast.Name(id=node.attr, ctx=ast.Load())
@@ -110,6 +115,7 @@ class BuiltinsAccessRemover(ast.NodeTransformer):
 
 class Dehexlify(ast.NodeTransformer):
     """Transforms a binascii.unhexlify(b'').decode('utf8') into a string"""
+
     def visit_Call(self, node: ast.Call) -> Any:
         if isinstance(node.func, ast.Attribute) and node.func.attr == "decode":
             if (
@@ -125,6 +131,7 @@ class Dehexlify(ast.NodeTransformer):
 
 class UselessEval(ast.NodeTransformer):
     """Eval can just be replaced with the string"""
+
     def visit_Call(self, node: ast.Call) -> Any:
         if (
             isinstance(node.func, ast.Name)
@@ -137,6 +144,7 @@ class UselessEval(ast.NodeTransformer):
 
 class UselessCompile(ast.NodeTransformer):
     """An call to compile() in Hyperion is usually useless"""
+
     def visit_Call(self, node: ast.Call) -> Any:
         if (
             isinstance(node.func, ast.Name)
@@ -150,9 +158,14 @@ class UselessCompile(ast.NodeTransformer):
 class ExecTransformer(ast.NodeTransformer):
     """Exec can be just transformed into bare code"""
     def visit_Call(self, node: ast.Call) -> Any:
-        if isinstance(node.func, ast.Name) and node.func.id == "exec":
-            if result := ast.parse(node.args[0].s).body:
-                return result[0]
+        if isinstance(node.func, ast.Name) and node.func.id == "exec" and isinstance(
+            node.args[0], ast.Str
+        ):
+            try:
+                if result := ast.parse(node.args[0].s).body:
+                    return result[0]
+            except SyntaxError:
+                pass
         return super().generic_visit(node)
 
 
@@ -170,7 +183,7 @@ class UselessLambda(ast.NodeTransformer):
     def visit_Assign(self, node: ast.Assign) -> Any:
         if isinstance(node.value, ast.Lambda):
             if isinstance(node.value.body, ast.Call):
-                # make sure both call and lambda gave no arguments
+                # make sure both call and lambda have no arguments
                 if not node.value.body.args:
                     visitor = self.FindReferences()
                     visitor.visit(node.value.body)
