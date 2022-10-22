@@ -1,7 +1,6 @@
 import logging
 from ast import NodeTransformer, parse, unparse
 from typing import Any, Dict, Tuple, Type
-from dataclasses import dataclass
 
 from .transformers import *
 from .transformers import constants
