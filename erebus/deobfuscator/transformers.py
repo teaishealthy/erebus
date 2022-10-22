@@ -38,27 +38,27 @@ class StringSubscriptSimple(ast.NodeTransformer):
     """Transforms Hyperion specific string slicing into a string literal"""
 
     def visit_Subscript(self, node: ast.Subscript):
-        if isinstance(node.value, ast.Str):
-            if isinstance(node.slice, ast.Slice):
-                code = unparse(node.slice.step)
-                if not any(s in code for s in string.ascii_letters):
+        if isinstance(node.value, ast.Str) and isinstance(node.slice, ast.Slice):
+            code = unparse(node.slice.step)
+            if all(s not in code for s in string.ascii_letters):
 
-                    s = node.value.s[:: eval(unparse(node.slice.step))]
-                    return ast.Str(s=s)
+                s = node.value.s[:: eval(unparse(node.slice.step))]
+                return ast.Str(s=s)
         return super().generic_visit(node)
 
 
 class GlobalsToVarAccess(ast.NodeTransformer):
     def visit_Subscript(self, node: ast.Subscript) -> Any:
         if (
-            isinstance(node.value, ast.Call)
-            and isinstance(node.value.func, ast.Name)
-            and node.value.func.id in ("globals", "locals", "vars")
+            (
+                isinstance(node.value, ast.Call)
+                and isinstance(node.value.func, ast.Name)
+                and node.value.func.id in ("globals", "locals", "vars")
+            )
+            and isinstance(node.slice, ast.Constant)
+            and isinstance(node.slice.value, str)
         ):
-            if isinstance(node.slice, ast.Constant) and isinstance(
-                node.slice.value, str
-            ):
-                return ast.Name(id=node.slice.value, ctx=ast.Load())
+            return ast.Name(id=node.slice.value, ctx=ast.Load())
         return super().generic_visit(node)
 
 
@@ -117,15 +117,18 @@ class Dehexlify(ast.NodeTransformer):
     """Transforms a binascii.unhexlify(b'').decode('utf8') into a string"""
 
     def visit_Call(self, node: ast.Call) -> Any:
-        if isinstance(node.func, ast.Attribute) and node.func.attr == "decode":
-            if (
+        if (
+            isinstance(node.func, ast.Attribute)
+            and node.func.attr == "decode"
+            and (
                 isinstance(node.func.value, ast.Call)
                 and isinstance(node.func.value.func, ast.Attribute)
                 and node.func.value.func.attr == "unhexlify"
-            ):
-                return ast.Str(
-                    s=bytes.fromhex(node.func.value.args[0].s.decode()).decode("utf8")
-                )
+            )
+        ):
+            return ast.Str(
+                s=bytes.fromhex(node.func.value.args[0].s.decode()).decode("utf8")
+            )
         return super().generic_visit(node)
 
 
@@ -181,18 +184,19 @@ class UselessLambda(ast.NodeTransformer):
             return super().generic_visit(node)
 
     def visit_Assign(self, node: ast.Assign) -> Any:
-        if isinstance(node.value, ast.Lambda):
-            if isinstance(node.value.body, ast.Call):
-                # make sure both call and lambda have no arguments
-                if not node.value.body.args:
-                    visitor = self.FindReferences()
-                    visitor.visit(node.value.body)
-                    # lambda arguments not in visitor.references
-                    return ast.Assign(
-                        targets=node.targets,
-                        value=node.value.body.func,
-                        lineno=node.lineno,
-                        col_offset=node.col_offset,
-                    )
+        if (
+            isinstance(node.value, ast.Lambda)
+            and isinstance(node.value.body, ast.Call)
+            and not node.value.body.args # make sure both call and lambda have no argument
+        ):
+            visitor = self.FindReferences()
+            visitor.visit(node.value.body)
+            # lambda arguments not in visitor.references
+            return ast.Assign(
+                targets=node.targets,
+                value=node.value.body.func,
+                lineno=node.lineno,
+                col_offset=node.col_offset,
+            )
 
         return super().generic_visit(node)
