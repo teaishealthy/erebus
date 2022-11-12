@@ -2,7 +2,7 @@
 import ast
 import string
 from ast import unparse
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 CONSTANTS = (
     ast.Name,
@@ -29,9 +29,11 @@ __all__ = (
     "UselessCompile",
     "ExecTransformer",
     "UselessLambda",
+    "LambdaCalls",
 )
 
 constants: Dict[str, Any] = {}
+lambdas: List[str] = []
 
 
 class StringSubscriptSimple(ast.NodeTransformer):
@@ -76,6 +78,20 @@ class InlineConstants(ast.NodeTransformer):
     def visit(self, node: Any) -> Any:
         self.FindConstants().visit(node)
         return super().visit(node)
+
+    def visit_Call(self, node: ast.Call) -> Any:
+        if (
+            isinstance(node.func, ast.Name)
+            and node.func.id in constants
+            and node.func.id in inline_meta
+        ):
+            return ast.Call(
+                func=constants[node.func.id],
+                args=[],
+                keywords=[],
+            )
+
+        return super().generic_visit(node)
 
     def visit_Name(self, node: ast.Name) -> Any:
         """Replace the name with the constant if it's in the constants dict"""
@@ -160,9 +176,12 @@ class UselessCompile(ast.NodeTransformer):
 
 class ExecTransformer(ast.NodeTransformer):
     """Exec can be just transformed into bare code"""
+
     def visit_Call(self, node: ast.Call) -> Any:
-        if isinstance(node.func, ast.Name) and node.func.id == "exec" and isinstance(
-            node.args[0], ast.Str
+        if (
+            isinstance(node.func, ast.Name)
+            and node.func.id == "exec"
+            and isinstance(node.args[0], ast.Str)
         ):
             try:
                 if result := ast.parse(node.args[0].s).body:
@@ -174,29 +193,52 @@ class ExecTransformer(ast.NodeTransformer):
 
 class UselessLambda(ast.NodeTransformer):
     # x = lambda: y() -> x = y
-    class FindReferences(ast.NodeVisitor):
-        def __init__(self) -> None:
-            self.references: Dict[str, int] = {}
-
-        def visit_Name(self, node: ast.Name) -> Any:
-            if isinstance(node.ctx, ast.Load):
-                self.references[node.id] = self.references.get(node.id, 0) + 1
-            return super().generic_visit(node)
-
     def visit_Assign(self, node: ast.Assign) -> Any:
         if (
             isinstance(node.value, ast.Lambda)
             and isinstance(node.value.body, ast.Call)
-            and not node.value.body.args # make sure both call and lambda have no argument
+            and not node.value.body.args  # make sure both call and lambda have no argument
+            and not node.value.args
         ):
-            visitor = self.FindReferences()
-            visitor.visit(node.value.body)
-            # lambda arguments not in visitor.references
+
             return ast.Assign(
                 targets=node.targets,
                 value=node.value.body.func,
                 lineno=node.lineno,
                 col_offset=node.col_offset,
+            )
+
+        return super().generic_visit(node)
+
+
+class LambdaSingleArgs(ast.NodeVisitor):
+    """Find all lambdas that lambda a: b()"""
+
+    def visit_Assign(self, node: ast.Assign) -> Any:
+        if (
+            isinstance(node.value, ast.Lambda)
+            and isinstance(node.value.body, ast.Call)
+            and not node.value.body.args
+            and len(node.value.args.args) == 1
+        ):
+            lambdas.append(node.targets[0].id)
+            constants[node.targets[0].id] = node.value.body.func
+
+
+class LambdaCalls(ast.NodeTransformer):
+    """Transforms calls to an assigned lambda into the lambda itself"""
+
+    def visit(self, node: Any) -> Any:
+        LambdaSingleArgs().visit(node)
+        return super().visit(node)
+
+    def visit_Call(self, node: ast.Call) -> Any:
+        if isinstance(node.func, ast.Name) and node.func.id in lambdas:
+
+            return ast.Call(
+                func=constants[node.func.id],
+                args=[],
+                keywords=[],
             )
 
         return super().generic_visit(node)

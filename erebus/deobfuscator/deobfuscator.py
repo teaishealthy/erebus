@@ -13,7 +13,9 @@ class Result:
         self.variables = variables
 
     def add_variables(self) -> None:
-        code = "\n".join([f"{name} = {unparse(value)}" for name, value in self.variables.items()])
+        code = "\n".join(
+            [f"{name} = {unparse(value)}" for name, value in self.variables.items()]
+        )
         self.code = f"{code}\n{self.code}"
 
 
@@ -32,6 +34,8 @@ class Deobfuscator:
         UselessLambda,
     )
 
+    AFTER_TRANSFORMERS: Tuple[Type[NodeTransformer], ...] = (LambdaCalls,)
+
     def __init__(self, code: str) -> None:
         self.code = code
         self.tree = parse(code)
@@ -48,6 +52,15 @@ class Deobfuscator:
                     logging.warning(f"Transformer {transformer_name} failed with {e}")
             # If nothing changed after a full pass, we're done
             if (result := unparse(self.tree)) == code:
+                for transformer in self.AFTER_TRANSFORMERS:
+                    try:
+                        self.tree = transformer().visit(self.tree)
+                    except Exception as e:
+                        transformer_name = transformer.__name__
+                        logging.warning(
+                            f"Transformer {transformer_name} failed with {e}"
+                        )
+                    code = unparse(self.tree)
                 break
             code = result
             passes += 1

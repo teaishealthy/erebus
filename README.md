@@ -27,14 +27,16 @@ In my testing, I have noticed that Hyperion sometimes produces code that is not 
 ## Features
 
 #### Default Settings
+
 erebus produces highly readable code when Hyperion was run with the default settings.
+
 #### Ultra Safe Mode
 
 If Hyperion was run in Ultra Safe Mode, erebus will produce code that is extremely similar to the original code as variables have not been renamed.
 
 #### Camouflate
 
-erebus currently does not support the Camouflate option of Hyperion, but it is planned.
+erebus currently does support the Camouflate option of Hyperion.
 
 
 ## License
