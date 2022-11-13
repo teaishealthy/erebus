@@ -79,20 +79,6 @@ class InlineConstants(ast.NodeTransformer):
         self.FindConstants().visit(node)
         return super().visit(node)
 
-    def visit_Call(self, node: ast.Call) -> Any:
-        if (
-            isinstance(node.func, ast.Name)
-            and node.func.id in constants
-            and node.func.id in inline_meta
-        ):
-            return ast.Call(
-                func=constants[node.func.id],
-                args=[],
-                keywords=[],
-            )
-
-        return super().generic_visit(node)
-
     def visit_Name(self, node: ast.Name) -> Any:
         """Replace the name with the constant if it's in the constants dict"""
         if node.id in constants:
