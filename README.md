@@ -8,6 +8,15 @@ A free and open source Hyperion deobfuscator.
 
 ## Usage
 
+### CLI
+
+```bash
+python -m erebus <input> [output]
+```
+If no output is specified, the deobfuscated code will be printed to stdout.
+
+### Python API
+
 ```py
 from erebus import deobfuscate
 
