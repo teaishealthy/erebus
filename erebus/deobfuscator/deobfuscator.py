@@ -32,9 +32,13 @@ class Deobfuscator:
         UselessEval,
         ExecTransformer,
         UselessLambda,
+        RemoveFromBuiltins,
     )
 
-    AFTER_TRANSFORMERS: Tuple[Type[NodeTransformer], ...] = (LambdaCalls,)
+    AFTER_TRANSFORMERS: Tuple[Type[NodeTransformer], ...] = (
+        LambdaCalls,
+        EmptyIf,
+    )
 
     def __init__(self, code: str) -> None:
         self.code = code

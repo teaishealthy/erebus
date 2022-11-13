@@ -30,6 +30,8 @@ __all__ = (
     "ExecTransformer",
     "UselessLambda",
     "LambdaCalls",
+    "EmptyIf",
+    "RemoveFromBuiltins",
 )
 
 constants: Dict[str, Any] = {}
@@ -197,7 +199,7 @@ class UselessLambda(ast.NodeTransformer):
         return super().generic_visit(node)
 
 
-class LambdaSingleArgs(ast.NodeVisitor):
+class LambdaSingleArgs(ast.NodeTransformer):
     """Find all lambdas that lambda a: b()"""
 
     def visit_Assign(self, node: ast.Assign) -> Any:
@@ -209,6 +211,7 @@ class LambdaSingleArgs(ast.NodeVisitor):
         ):
             lambdas.append(node.targets[0].id)
             constants[node.targets[0].id] = node.value.body.func
+            return ast.Module(body=[], type_ignores=[])
 
 
 class LambdaCalls(ast.NodeTransformer):
@@ -227,4 +230,22 @@ class LambdaCalls(ast.NodeTransformer):
                 keywords=[],
             )
 
+        return super().generic_visit(node)
+
+
+class EmptyIf(ast.NodeTransformer):
+    """Remove useless if statements"""
+
+    def visit_If(self, node: ast.If) -> Any:
+        if type(node.test) is ast.Constant and not bool(node.test.value):
+            return ast.Module(body=[], type_ignores=[])
+        return super().generic_visit(node)
+
+
+class RemoveFromBuiltins(ast.NodeTransformer):
+    """Remove all from builtins import *"""
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> Any:
+        if node.module == "builtins":
+            return ast.Module(body=[], type_ignores=[])
         return super().generic_visit(node)
