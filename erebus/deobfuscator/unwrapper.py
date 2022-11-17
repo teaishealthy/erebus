@@ -1,6 +1,11 @@
 import ast
+import logging
 import zlib
+from functools import reduce
+from operator import add
 from typing import List
+
+logger = logging.getLogger(__name__)
 
 
 class BlobFinder(ast.NodeVisitor):
@@ -20,4 +25,6 @@ def unwrap(code: str) -> str:
     """Find the actual code as a blob of obfuscated code"""
     tree = ast.parse(code)
     blobs = BlobFinder().find_blobs(tree)
-    return zlib.decompress(max(blobs, key=len)).decode()
+    blob = reduce(add, blobs)
+    logger.info(f"Found blob of length {len(blob)}")
+    return zlib.decompress(blob).decode()
